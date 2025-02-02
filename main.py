@@ -6,7 +6,7 @@ def main():
     parser.add_argument('data_dir', type=str, help='The file for station data.')
     parser.add_argument('precedence_diagram', type=str, help='The file for precedence diagram.')
     parser.add_argument('n_operators', type=int, help='Number of operators available.')
-    parser.add_argument('distribution_type', type=str, help='Distribution type: TIME, METABOLIC_COST, BOTHv1')
+    parser.add_argument('distribution_type', type=str, help='Distribution type: [TIME, METABOLIC_COST, BOTH]')
     parser.add_argument('--threshold', type=int, help='Percentage of additional task effort to be added.', default=10)
     args = parser.parse_args()
 
@@ -27,7 +27,9 @@ def main():
         results = distribution_based_on_time(tasks, metabolic_costs, precedence, cycle_time, threshold, n_operators)
     elif args.distribution_type == 'METABOLIC_COST':
         results = distribution_based_on_metabolic_cost(tasks, metabolic_costs, precedence, max_metabolic_cost, threshold, n_operators)
-    
+    elif args.distribution_type == 'BOTH':
+        results = distribution_considering_both(tasks, metabolic_costs, precedence, cycle_time, max_metabolic_cost, threshold, n_operators)
+
     workstations_performance = Workstation.get_overall_performance(results)
     plot_results(workstations_performance, cycle_time, max_metabolic_cost)
 

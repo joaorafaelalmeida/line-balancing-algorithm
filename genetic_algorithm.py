@@ -3,6 +3,10 @@ import matplotlib.pyplot as plt
 
 class Workstation:
     idx = 1
+
+    def reset_idx():
+        Workstation.idx = 1
+
     def get_overall_performance(workstations):
         """
         Returns the overall performance of the workstations.
@@ -163,76 +167,64 @@ def calculate_avg_metabolic_cost(metabolic_costs, n_operators):
     """
     return sum(metabolic_costs.values()) / n_operators
 
-def distribution_considering_both(tasks, metabolic_costs, precedence, cycle_time, max_metabolic_cost):
+def distribution_considering_both(tasks, metabolic_costs, precedence, cycle_time, max_metabolic_cost, threshold, n_operators):
     """
-    DEPRECATED    
     Solve with both cycle time and metabolic cost constraints.
-    
+
     :param tasks: A dictionary where keys are task IDs, and values are processing times.
     :param metabolic_costs: A dictionary where keys are task IDs, and values are metabolic costs.
     :param precedence: A list of tuples representing precedence constraints.
     :param cycle_time: The maximum time allowed per workstation.
     :param max_metabolic_cost: The maximum metabolic cost allowed per workstation.
     :param threshold: The threshold for the percentage of additional task effort to be added.
+    :param n_operators: The number of operators available.
     :return: A dictionary where keys are workstation IDs, and values are lists of task IDs assigned to each workstation.
     """
-    # Step 1: Build the precedence graph
-    task_graph, indegree = build_precedence_graph(precedence)
+    dbt = distribution_based_on_time(tasks, metabolic_costs, precedence, cycle_time, threshold, n_operators)
+    Workstation.reset_idx()
+    dbmc = distribution_based_on_metabolic_cost(tasks, metabolic_costs, precedence, max_metabolic_cost, threshold, n_operators)
+    Workstation.reset_idx()
+    workstations = {}
 
-    # Step 2: Find tasks with no prerequisites (indegree 0)
-    available_tasks = [task for task in tasks if indegree[task] == 0]
-    
-    # Step 3: Assign tasks to workstations
-    workstations = defaultdict(list)
-    workstations_performance = defaultdict(tuple)
-    workstation_id = 1
-    current_time = 0
-    current_metabolic_cost = 0
-    
-    assign_one_more_task = True
-    while available_tasks:
-        task_to_assign = None
-        for task in available_tasks:
-            if (current_time + tasks[task] <= cycle_time and
-                current_metabolic_cost + metabolic_costs[task] <= max_metabolic_cost):
-                task_to_assign = task
-                assign_one_more_task = True
-                break
+    missing_assignments = []
+    for ws_id in dbt:
+        if ws_id in dbmc:
+            for task in dbt[ws_id].get_tasks():
+                if task in dbmc[ws_id].get_tasks():
+                    if ws_id not in workstations:
+                        w = Workstation()
+                        workstations[w.id] = w
+                    workstations[w.id].add_task(task, tasks[task], metabolic_costs[task])
+                else:
+                    missing_assignments.append(task)
 
-        if task_to_assign is None and assign_one_more_task:
-            assign_one_more_task = False
-            task_to_assign = available_tasks[0]
-            # Discover if it was a time problem or metabolic cost problem
-            if current_time + tasks[available_tasks[0]] > cycle_time:
-                # It was a time problem
-                for task in available_tasks:
-                    if tasks[task] < tasks[task_to_assign]:
-                        task_to_assign = task
-            else:
-                # It was a metabolic cost problem
-                for task in available_tasks:
-                    if metabolic_costs[task] < metabolic_costs[task_to_assign]:
-                        task_to_assign = task
-        
-        if task_to_assign:
-            # Assign task to the current workstation
-            workstations[workstation_id].append(task_to_assign)
-            current_time += tasks[task_to_assign]
-            current_metabolic_cost += metabolic_costs[task_to_assign]
-            available_tasks.remove(task_to_assign)
-            workstations_performance[workstation_id] = (current_time, current_metabolic_cost)
-            
-            # Update indegree of dependent tasks
-            for dependent_task in task_graph[task_to_assign]:
-                indegree[dependent_task] -= 1
-                if indegree[dependent_task] == 0:
-                    available_tasks.append(dependent_task)
-        else:
-            # Move to the next workstation
-            workstation_id += 1
-            current_time = 0
-            current_metabolic_cost = 0
-    return dict(workstations), dict(workstations_performance)
+    # Assign missing tasks to the best workstation
+    for task in missing_assignments:
+        best_workstation = None
+        workstations_with_task = []
+        for ws_id, workstation in dbt.items():
+            if task in workstation.get_tasks():
+                workstations_with_task.append(workstation)
+        for ws_id, workstation in dbmc.items():
+            if task in workstation.get_tasks():
+                workstations_with_task.append(workstation)
+
+        increase_percentages = {}
+        for ws in workstations_with_task:
+            current_time = ws.cycle_time
+            current_metabolic_cost = ws.metabolic_cost
+
+            time_increase_percentage = ((current_time + tasks[task]) / current_time - 1) * 100
+            metabolic_increase_percentage = ((current_metabolic_cost + metabolic_costs[task]) / current_metabolic_cost - 1) * 100
+            increase_percentages[ws.id] = [time_increase_percentage, metabolic_increase_percentage]
+
+        best_workstation = max(increase_percentages, key=lambda x: increase_percentages[x][0])
+        if best_workstation:
+            workstations[best_workstation].add_task(task, tasks[task], metabolic_costs[task])
+
+    return workstations
+
+   
 
 def distribution_based_on_time(tasks, metabolic_costs, precedence, cycle_time, threshold, n_operators):
     """
