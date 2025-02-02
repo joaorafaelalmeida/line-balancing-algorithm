@@ -29,7 +29,7 @@ This project implements a line balancing algorithm to optimize task assignments 
 To visualize the precedence constraints, you can use graph visualization tools that support DOT files.
 
 ```
-$ python main.py files/data.txt files/precedencediagram.dot 5
+$ python main.py files/data.txt files/precedencediagram.dot 5 BOTH --threshold 0
 ```
 
 ![Example for 5 operators.](figs/plot_for_5_operators.png) 
