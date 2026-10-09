@@ -82,13 +82,21 @@ def run_mode(mode, tasks, metabolic_costs, precedence, n_operators, threshold=10
         )
 
 
+def station_loads(workstations, attr="cycle_time"):
+    # All modes are scored on the same basis: RA-adjusted station time and raw metabolic cost,
+    # recomputed from the assigned tasks (the stored workstation time differs between modes).
+    if attr == "cycle_time":
+        return [sum(adjusted_times[t] for t in ws.get_tasks()) for ws in workstations.values()]
+    return [sum(metabolic_costs[t] for t in ws.get_tasks()) for ws in workstations.values()]
+
+
 def smoothness_index(workstations, target, attr="cycle_time"):
-    values = [getattr(ws, attr) for ws in workstations.values()]
+    values = station_loads(workstations, attr)
     return float(np.sqrt(sum((target - v) ** 2 for v in values)))
 
 
 def line_efficiency(workstations, total_raw_time):
-    max_ct = max(ws.cycle_time for ws in workstations.values())
+    max_ct = max(station_loads(workstations))
     return total_raw_time / (len(workstations) * max_ct)
 
 
@@ -141,12 +149,12 @@ fig, axes = plt.subplots(1, 3, figsize=(14, 4.5), sharey=True)
 for ax, mode in zip(axes, MODES):
     ws     = run_mode(mode, tasks, metabolic_costs, precedence, N_OPS, THRESHOLD)
     ws_ids = list(ws.keys())
-    # TIME mode is balanced against the RA-adjusted target; the other modes against the raw target
-    ct_avg = calculate_avg_cycle_time(adjusted_times if mode == "TIME" else tasks, N_OPS)
+    # all modes are compared against the RA-adjusted cycle-time target
+    ct_avg = calculate_avg_cycle_time(adjusted_times, N_OPS)
     mc_avg = calculate_avg_metabolic_cost(metabolic_costs, N_OPS)
 
-    norm_ct = [ws[i].cycle_time    / ct_avg for i in ws_ids]
-    norm_mc = [ws[i].metabolic_cost / mc_avg for i in ws_ids]
+    norm_ct = [c / ct_avg for c in station_loads(ws)]
+    norm_mc = [m / mc_avg for m in station_loads(ws, "metabolic_cost")]
 
     x = np.arange(len(ws_ids))
     w = 0.38
@@ -165,7 +173,7 @@ for ax, mode in zip(axes, MODES):
 
 fig.suptitle(
     f"Normalised Workstation Load by Mode  (n = {N_OPS} operators, threshold = {THRESHOLD}%)\n"
-    f"Values above 1.0 exceed the target; CT target = {calculate_avg_cycle_time(tasks, N_OPS):.0f}s, "
+    f"Values above 1.0 exceed the target; CT target = {calculate_avg_cycle_time(adjusted_times, N_OPS):.0f}s (RA-adjusted), "
     f"MC target = {calculate_avg_metabolic_cost(metabolic_costs, N_OPS):.2f} kCal",
     fontsize=11, y=1.03,
 )
@@ -185,13 +193,13 @@ results_sens = {mode: [] for mode in MODES}
 for n in N_RANGE:
     for mode in MODES:
         ws = run_mode(mode, tasks, metabolic_costs, precedence, n, THRESHOLD)
-        ct = calculate_avg_cycle_time(tasks, n)
+        ct = calculate_avg_cycle_time(adjusted_times, n)
         results_sens[mode].append({
             "n":                n,
             "efficiency":       line_efficiency(ws, total_raw_time),
             "smoothness_index": smoothness_index(ws, ct),
-            "max_cycle_time":   max(w.cycle_time for w in ws.values()),
-            "max_metabolic":    max(w.metabolic_cost for w in ws.values()),
+            "max_cycle_time":   max(station_loads(ws)),
+            "max_metabolic":    max(station_loads(ws, "metabolic_cost")),
         })
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
@@ -355,11 +363,11 @@ for thr in THRESHOLDS:
     )
     thresh_metrics.append({
         "threshold":        thr,
-        "max_ct":           max(w.cycle_time for w in ws.values()),
-        "min_ct":           min(w.cycle_time for w in ws.values()),
+        "max_ct":           max(station_loads(ws)),
+        "min_ct":           min(station_loads(ws)),
         "smoothness_index": smoothness_index(ws, ct_ra_ref),
         "efficiency":       line_efficiency(ws, total_raw_time),
-        "violations":       sum(1 for w in ws.values() if w.cycle_time > ct_ra_ref * (1 + thr / 100)),
+        "violations":       sum(1 for c in station_loads(ws) if c > ct_ra_ref * (1 + thr / 100)),
     })
 
 df_thr = pd.DataFrame(thresh_metrics)
@@ -404,11 +412,10 @@ for n in N_RANGE:
     mc  = calculate_avg_metabolic_cost(metabolic_costs, n)
     ct_adj = calculate_avg_cycle_time(adjusted_times, n)
     for mode in MODES:
-        use_ra = (mode == "TIME")
-        ws = run_mode(mode, tasks, metabolic_costs, precedence, n, THRESHOLD, use_ra=use_ra)
-        times    = [w.cycle_time    for w in ws.values()]
-        energies = [w.metabolic_cost for w in ws.values()]
-        ref_ct   = ct_adj if use_ra else ct
+        ws = run_mode(mode, tasks, metabolic_costs, precedence, n, THRESHOLD)
+        times    = station_loads(ws)
+        energies = station_loads(ws, "metabolic_cost")
+        ref_ct   = ct_adj
         rows.append({
             "Mode":              mode,
             "Operators":         n,
@@ -464,11 +471,10 @@ print("\nFigure 6: alpha sensitivity in BOTH mode …")
 ALPHAS = [0.0, 0.25, 0.5, 0.75, 1.0]
 ALPHA_LABELS = {0.0: "α=0\n(metabolic only)", 0.25: "α=0.25", 0.5: "α=0.5\n(equal)", 0.75: "α=0.75", 1.0: "α=1\n(time only)"}
 
-# Stage-1 TIME sub-solution uses the RA-adjusted target (consistent with run_mode/
-# standalone TIME); the raw target is the reference for SI, violations, and
-# normalisation (consistent with metrics() and Tables 3/4).
+# The RA-adjusted target is used both for the stage-1 TIME sub-solution and as the
+# reference for SI, violations and normalisation (same basis as all other results).
 ct_stage1 = calculate_avg_cycle_time(compute_per_task_ra_times(tasks, metabolic_costs), N_OPS)
-ct_ref    = calculate_avg_cycle_time(tasks, N_OPS)
+ct_ref    = ct_stage1
 mc_avg5   = calculate_avg_metabolic_cost(metabolic_costs, N_OPS)
 
 alpha_rows = []
@@ -477,8 +483,8 @@ for alpha in ALPHAS:
     ws = distribution_considering_both(
         tasks, metabolic_costs, precedence, ct_stage1, mc_avg5, THRESHOLD, N_OPS, alpha=alpha
     )
-    times    = [w.cycle_time    for w in ws.values()]
-    energies = [w.metabolic_cost for w in ws.values()]
+    times    = station_loads(ws)
+    energies = station_loads(ws, "metabolic_cost")
     alpha_rows.append({
         "alpha":            alpha,
         "max_norm_ct":      max(t / ct_ref for t in times),
@@ -540,3 +546,42 @@ plt.close(fig)
 print("  saved fig6_alpha_sensitivity.pdf")
 
 print(f"\nAll results saved to ./{RESULTS_DIR}/")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TABLE 3 — Sensitivity to the Maximum Acceptable Working Level (MAWL)
+# ═══════════════════════════════════════════════════════════════════════════════
+print("\nTable 3: MAWL sensitivity …")
+
+import algorithm
+from baselines import evaluate
+
+MAWL_VALUES = [3.0, 3.25, 3.5, 3.75, 4.0, 4.3, 4.5, 5.0]
+base_mawl = algorithm.MAWL
+mawl_rows = []
+for mawl in MAWL_VALUES:
+    algorithm.MAWL = mawl
+    adj = compute_per_task_ra_times(tasks, metabolic_costs)
+    ct = calculate_avg_cycle_time(adj, N_OPS)
+    mc = calculate_avg_metabolic_cost(metabolic_costs, N_OPS)
+    row = {
+        "MAWL (kCal/min)":   mawl,
+        "Tasks above MAWL":  sum(1 for t in tasks if adj[t] > tasks[t] + 1e-12),
+        "RA overhead (%)":   round((sum(adj.values()) / total_raw_time - 1) * 100, 2),
+        "Target CT (s)":     round(ct, 1),
+    }
+    for mode in ["TIME", "BOTH"]:
+        Workstation.reset_idx()
+        if mode == "TIME":
+            ws = distribution_based_on_time(tasks, metabolic_costs, precedence, ct, THRESHOLD, N_OPS)
+        else:
+            ws = distribution_considering_both(tasks, metabolic_costs, precedence, ct, mc, THRESHOLD, N_OPS, alpha=0.5)
+        e = evaluate({k: w.get_tasks() for k, w in ws.items()}, tasks, adj, metabolic_costs, N_OPS)
+        row[f"{mode} max CT (s)"] = round(e["cycle_time"], 1)
+        row[f"{mode} max MC (kCal)"] = round(e["max_metabolic"], 2)
+        row[f"{mode} efficiency"] = round(e["efficiency"], 3)
+    mawl_rows.append(row)
+algorithm.MAWL = base_mawl
+
+df_mawl = pd.DataFrame(mawl_rows)
+df_mawl.to_csv(f"{RESULTS_DIR}/table3_mawl_sensitivity.csv", index=False)
+print(df_mawl.to_string(index=False))

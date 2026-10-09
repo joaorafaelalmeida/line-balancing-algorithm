@@ -1,54 +1,57 @@
+# An Ergonomic Graph-Based Heuristic for Assembly Line Balancing with Rest Allowance
+
 ## Overview
 
-This repository contains the implementation of a graph-based greedy heuristic for the Simple Assembly Line Balancing Problem (SALBP-1 type), extended with dual ergonomic constraints: **rest allowance (RA)** and **metabolic cost**. The method assigns tasks to a fixed number of operators while respecting precedence constraints, minimising workload imbalance, and ensuring physiological feasibility.
+This repository contains the implementation of a graph-based greedy heuristic for the Simple Assembly Line Balancing Problem with a fixed number of operators (SALBP-2), extended with two ergonomic dimensions: **rest allowance (RA)** and **metabolic cost**. The greedy construction is embedded in a capacity search and followed by a precedence-feasible local search. The method is benchmarked against an exact MILP model and the Ranked Positional Weight (RPW) heuristic.
 
-The approach is validated on a real-world hot water boiler assembly line comprising **160 tasks** and **193 precedence constraints**, with metabolic expenditure estimated via MTM-UAS.
+The approach is validated on a real-world hot water boiler assembly line comprising **160 tasks** and **193 precedence constraints**, with metabolic expenditure estimated via MTM-UAS, and on **13 benchmark instances** from Scholl (1999).
 
 This code accompanies the journal paper:
 
 > *An Ergonomic Graph-Based Heuristic for Assembly Line Balancing with Rest Allowance* (under review)
 
-## Features
+## Method
 
-- **Rest Allowance (RA) integration**: per-task rest allowances are pre-computed using the Price (1990) formula and used to inflate task times before balancing, ensuring physiologically feasible schedules.
+- **Rest allowance**: per-task rest allowances are computed with the Price (1990) formula and used to inflate task times before balancing. The Maximum Acceptable Working Level is set by `MAWL` in `algorithm.py` (default 3.5 kCal/min).
+- **Capacity search**: for a fixed number of operators, the station capacity is the smallest value, not below the ideal load, for which the greedy packing fits all tasks; it is found by bisection.
+- **Local search**: precedence-feasible moves and swaps of tasks between stations, minimising the (weighted) maximum normalised station load, with the smoothness of the loads as tie-breaker.
 - **Three distribution modes**:
-  - `TIME` — greedy assignment driven by RA-adjusted cycle time; minimises cycle time imbalance.
-  - `METABOLIC_COST` — greedy assignment driven by raw metabolic cost; equalises energy expenditure across operators.
-  - `BOTH` — consensus mode that reconciles the TIME and METABOLIC\_COST solutions through a normalised, $\alpha$-weighted conflict-resolution step.
-- **Smoothness Index** ($SI_C$, $SI_M$) and **line efficiency** ($\eta$) as performance metrics.
-- **Sensitivity analysis** over number of operators ($K$), overload tolerance ($\delta$), and consensus weight ($\alpha$).
+  - `TIME` — balances the RA-adjusted cycle time.
+  - `METABOLIC_COST` — balances the metabolic cost.
+  - `BOTH` — reconciles the two through a normalised, $\alpha$-weighted conflict-resolution step, followed by local search.
+- **Benchmarks** (`baselines.py`): exact MILP (solved with HiGHS via PuLP) and RPW with capacity search, both on the same RA-adjusted times.
 
 ## Repository Structure
 
 ```
 ├── main.py                  # CLI entry point
-├── algorithm.py             # Core graph-based greedy algorithm
-├── experiments.py           # Sensitivity analysis experiments
+├── algorithm.py             # Graph-based greedy heuristic, capacity search and local search
+├── baselines.py             # MILP model, RPW heuristic, Scholl reader, evaluation
+├── experiments.py           # Case-study experiments (figures and tables of the paper)
+├── benchmark.py             # Comparison with MILP and RPW (case study and Scholl instances)
+├── analyze_benchmark.py     # Summary of the benchmark results
+├── genetic_algorithm.py     # Earlier implementation (not used by the current code)
 ├── files/
-│   ├── data.txt             # Task cycle times and metabolic costs
-│   └── precedencediagram.dot  # Precedence constraints (DOT format)
-├── results/                 # Generated figures (PDF)
-├── figs/                    # Example output plots
-└── sn-article-template/     # LaTeX source of the companion paper
+│   ├── data.txt             # Task cycle times and metabolic costs (case study)
+│   ├── precedencediagram.dot  # Precedence constraints (DOT format)
+│   └── scholl/              # 13 Scholl (1999) instances (.IN2)
+└── results/                 # Figures and tables produced by the scripts
 ```
 
 ## Requirements
 
 - Python 3.12+
-- Standard libraries: `argparse`, `collections`, `math`
-- `matplotlib` for plotting
-- `graphviz` (optional, for visualising the precedence diagram)
-
-Install dependencies:
+- `numpy`, `pandas`, `matplotlib`
+- `pulp` and `highspy` (MILP benchmark only)
 
 ```bash
-pip install matplotlib
+pip install numpy pandas matplotlib pulp highspy
 ```
 
 ## Usage
 
 ```bash
-python main.py <data_file> <precedence_file> <K> <MODE> [--threshold DELTA] [--alpha ALPHA]
+python main.py <data_file> <precedence_file> <K> <MODE> [--threshold DELTA] [--alpha ALPHA] [--mawl MAWL]
 ```
 
 | Argument | Description |
@@ -57,27 +60,14 @@ python main.py <data_file> <precedence_file> <K> <MODE> [--threshold DELTA] [--a
 | `precedence_file` | Path to DOT precedence diagram |
 | `K` | Number of operators (workstations) |
 | `MODE` | Distribution mode: `TIME`, `METABOLIC_COST`, or `BOTH` |
-| `--threshold` | Overload tolerance $\delta$ in % (default: `10`) |
-| `--alpha` | Weight for cycle time in BOTH mode conflict resolution, $\alpha \in [0,1]$ (default: `0.5`) |
+| `--threshold` | Overload tolerance $\delta$ in % (default: `0`) |
+| `--alpha` | Weight of cycle time in BOTH mode, $\alpha \in [0,1]$ (default: `0.5`) |
+| `--mawl` | Maximum Acceptable Working Level in kCal/min (default: `3.5`) |
 
-### Examples
-
-**TIME mode, 5 operators, no tolerance:**
+Example (BOTH mode, 5 operators):
 ```bash
-python main.py files/data.txt files/precedencediagram.dot 5 TIME --threshold 0
+python main.py files/data.txt files/precedencediagram.dot 5 BOTH --alpha 0.5
 ```
-
-**METABOLIC_COST mode, 7 operators:**
-```bash
-python main.py files/data.txt files/precedencediagram.dot 7 METABOLIC_COST --threshold 5
-```
-
-**BOTH (consensus) mode, 5 operators, equal weight:**
-```bash
-python main.py files/data.txt files/precedencediagram.dot 5 BOTH --threshold 0 --alpha 0.5
-```
-
-![Example output for 5 operators.](figs/plot_for_5_operators.png)
 
 ## Input Format
 
@@ -91,20 +81,20 @@ python main.py files/data.txt files/precedencediagram.dot 5 BOTH --threshold 0 -
 digraph {
     1 -> 2
     1 -> 3
-    2 -> 4
     ...
 }
 ```
 
-## Reproducing Paper Results
-
-All sensitivity experiments (operators 3–10, thresholds 0–20%, $\alpha \in [0,1]$) can be reproduced by running:
+## Reproducing the Paper Results
 
 ```bash
-python experiments.py
+python experiments.py                        # case-study figures and tables, incl. MAWL sensitivity
+python benchmark.py case                     # case study: heuristic vs RPW vs MILP (K = 3..10)
+python benchmark.py scholl --workers 6       # Scholl instances: 13 x K = 5..10 x 6 energy profiles
+python analyze_benchmark.py                  # summary table of the benchmark
 ```
 
-Output figures are saved to `results/`.
+Outputs are written to `results/`. The Scholl benchmark runs the MILP with a 60 s limit per stage and takes several hours; it resumes from the configurations already saved in `results/benchmark_scholl.csv`. Energy expenditure for the Scholl instances is generated as in Finco et al. (2020), with fixed random seeds.
 
 ## Reference
 

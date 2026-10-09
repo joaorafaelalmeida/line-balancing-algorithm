@@ -1,0 +1,34 @@
+\begin{tabular}{lllrrrr}
+\toprule
+Dataset & Objective & Method & Mean gap (\%) & Max gap (\%) & Within 1\% (\%) & Mean time (s) \\
+\midrule
+Case study & TIME & Greedy-TIME (original) & 13.00 & 25.36 & 12.50 & 0.00 \\
+Case study & TIME & Greedy-TIME (capacity search) & 0.25 & 1.23 & 87.50 & 0.00 \\
+Case study & TIME & Greedy-TIME & 0.25 & 1.23 & 87.50 & 0.08 \\
+Case study & TIME & RPW-TIME & 0.15 & 0.72 & 100.00 & 0.01 \\
+Case study & TIME & MILP-TIME & 0.00 & 0.00 & 100.00 & 0.09 \\
+Case study & METABOLIC\_COST & Greedy-MC (original) & 8.07 & 16.14 & 0.00 & 0.00 \\
+Case study & METABOLIC\_COST & Greedy-MC (capacity search) & 0.32 & 1.16 & 87.50 & 0.00 \\
+Case study & METABOLIC\_COST & Greedy-MC & 0.18 & 1.16 & 87.50 & 0.16 \\
+Case study & METABOLIC\_COST & RPW-MC & 0.00 & 0.02 & 100.00 & 0.01 \\
+Case study & METABOLIC\_COST & MILP-METABOLIC_COST & 0.00 & 0.00 & 100.00 & 0.14 \\
+Case study & BOTH & Greedy-BOTH (original) & 5.79 & 11.64 & 12.50 & 0.00 \\
+Case study & BOTH & Greedy-BOTH (capacity search) & 4.17 & 12.16 & 12.50 & 0.01 \\
+Case study & BOTH & Greedy-BOTH & 0.11 & 0.50 & 100.00 & 0.57 \\
+Case study & BOTH & MILP-BOTH & 0.00 & 0.00 & 100.00 & 10.03 \\
+Scholl & TIME & Greedy-TIME (original) & 52.43 & 610.11 & 0.43 & 0.00 \\
+Scholl & TIME & Greedy-TIME (capacity search) & 3.74 & 17.68 & 14.74 & 0.00 \\
+Scholl & TIME & Greedy-TIME & 2.11 & 13.69 & 42.74 & 0.10 \\
+Scholl & TIME & RPW-TIME & 1.63 & 8.41 & 44.66 & 0.01 \\
+Scholl & TIME & MILP-TIME & 0.00 & 0.00 & 100.00 & 50.63 \\
+Scholl & METABOLIC\_COST & Greedy-MC (original) & 43.71 & 667.75 & 0.21 & 0.00 \\
+Scholl & METABOLIC\_COST & Greedy-MC (capacity search) & 4.14 & 21.13 & 11.97 & 0.00 \\
+Scholl & METABOLIC\_COST & Greedy-MC & 2.19 & 14.32 & 40.81 & 0.10 \\
+Scholl & METABOLIC\_COST & RPW-MC & 1.75 & 11.01 & 42.09 & 0.01 \\
+Scholl & METABOLIC\_COST & MILP-METABOLIC_COST & 0.00 & 0.00 & 100.00 & 52.76 \\
+Scholl & BOTH & Greedy-BOTH (original) & 41.07 & 631.27 & 0.00 & 0.00 \\
+Scholl & BOTH & Greedy-BOTH (capacity search) & 18.58 & 99.76 & 1.71 & 0.01 \\
+Scholl & BOTH & Greedy-BOTH & 1.61 & 12.02 & 40.60 & 0.47 \\
+Scholl & BOTH & MILP-BOTH & 0.00 & 0.00 & 100.00 & 62.56 \\
+\bottomrule
+\end{tabular}
